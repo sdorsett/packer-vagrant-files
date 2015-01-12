@@ -1,0 +1,40 @@
+esxi_box_url = '/root/box-files/esxi55-vmware_ovf-1.1.box'
+ 
+nodes = [
+  { :hostname => 'esx-01a', :box => 'esxi55', :box_url => esxi_box_url},
+  { :hostname => 'esx-02a', :box => 'esxi55', :box_url => esxi_box_url},
+]
+ 
+Vagrant.configure('2') do |config|
+ 
+  config.vm.provider :vcenter do |vcenter|
+    vcenter.hostname = '192.168.1.195'
+    vcenter.username = 'root'
+    vcenter.password = 'mySecretP@ssw0rd'
+    vcenter.folder_name = 'Vagrant/Deployed'
+    vcenter.datacenter_name = 'datacenter-01'
+    vcenter.computer_name = 'cluster-01'
+    vcenter.datastore_name = 'vsanDatastore'
+    vcenter.template_folder_name = 'Vagrant/Templates'
+    vcenter.network_name = 'vlan2'
+    vcenter.linked_clones = true
+    vcenter.enable_vm_customization = false
+  end
+ 
+  # Go through nodes and configure each of them.j
+  nodes.each do |node|
+    config.vm.define node[:hostname] do |node_config|
+ 
+      if node[:hostname].include? 'esx-'
+        node_config.ssh.username = 'root'
+        node_config.ssh.shell = 'sh'
+        node_config.ssh.insert_key = false
+        node_config.vm.synced_folder '.', '/vagrant', disabled: true
+      end
+ 
+      node_config.vm.box = node[:box]
+      node_config.vm.hostname = node[:hostname]
+      node_config.vm.box_url = node[:box_url]
+    end
+  end
+end

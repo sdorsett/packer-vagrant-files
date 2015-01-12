@@ -1,0 +1,64 @@
+vcsa_box_url = '/root/box-files/vcsa-5.5.0.20000-2063318-vmware_ovf-1.0.box'
+
+$script = <<SCRIPT
+#!/bin/bash
+# Commands to configure all the necessary services to start the vCenter Service, thanks @lamw ! see:
+# http://www.virtuallyghetto.com/2012/02/automating-vcenter-server-appliance.html
+ 
+echo "Accepting EULA ..."
+/usr/sbin/vpxd_servicecfg eula accept
+ 
+echo "Configuring Embedded DB ..."
+/usr/sbin/vpxd_servicecfg db write embedded
+ 
+echo "Configuring SSO..."
+/usr/sbin/vpxd_servicecfg sso write embedded
+ 
+echo "Starting VCSA ..."
+/usr/sbin/vpxd_servicecfg service start
+
+# http://www.virtuallyghetto.com/2014/02/how-to-automate-ntp-configurations-on.html
+/usr/sbin/vpxd_servicecfg timesync write ntp 'pool.ntp.org' ''
+
+# Command to set IP address to 192.168.1.81:
+# http://www.virtuallyghetto.com/2013/02/automating-vcsa-network-configurations.html
+echo "Setting static IP address to 192.168.1.81"
+/opt/vmware/share/vami/vami_set_network eth0 STATICV4 192.168.1.81 255.255.255.0 192.168.1.1 >&- 2>&- <&- &
+SCRIPT
+
+nodes = [
+  { :hostname => 'vcsa-01a', :box => 'vcsa-5.5.0.20000-2063318', :box_url => vcsa_box_url}
+]
+ 
+Vagrant.configure('2') do |config|
+ 
+  config.vm.provider :vcenter do |vcenter|
+    vcenter.hostname = '192.168.1.195'
+    vcenter.username = 'root'
+    vcenter.password = 'mySecretP@ssw0rd'
+    vcenter.folder_name = 'Vagrant/Deployed'
+    vcenter.datacenter_name = 'datacenter-01'
+    vcenter.computer_name = 'cluster-01'
+    vcenter.datastore_name = 'vsanDatastore'
+    vcenter.template_folder_name = 'Vagrant/Templates'
+    vcenter.network_name = 'vlan2'
+    vcenter.linked_clones = true
+    vcenter.enable_vm_customization = false
+  end
+ 
+  # Go through nodes and configure each of them.j
+  nodes.each do |node|
+    config.vm.define node[:hostname] do |node_config|
+ 
+      if node[:hostname].include? 'vcsa-'
+        node_config.ssh.username = 'root'
+        node_config.ssh.insert_key = false
+        node_config.vm.synced_folder '.', '/vagrant', disabled: true
+        node_config.vm.provision "shell", inline: $script
+      end 
+      node_config.vm.box = node[:box]
+      node_config.vm.hostname = node[:hostname]
+      node_config.vm.box_url = node[:box_url]
+    end
+  end
+end
